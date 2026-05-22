@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#0a1628"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>Figurinhas Copa 2026</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a1628;font-family:Georgia,serif;color:#E8F0FF;-webkit-tap-highlight-color:transparent}
+#app{max-width:480px;margin:0 auto;min-height:100vh}
+button{font-family:Georgia,serif}
+input{font-family:Georgia,serif}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const C={bg:"#0a1628",surface:"#0f1e38",surface2:"#162440",border:"#1e3058",border2:"#2a4070",yellow:"#FFD700",yellowSoft:"#FFC107",green:"#00E676",red:"#FF5252",white:"#FFFFFF",text:"#E8F0FF",textMuted:"#6a8ab8",textDim:"#3a5080"};
+
+const GROUPS={
+"Grupo A":["México","Coreia do Sul","República Tcheca","África do Sul"],
+"Grupo B":["Canadá","Bósnia","Catar","Suíça"],
+"Grupo C":["Brasil","Marrocos","Haiti","Escócia"],
+"Grupo D":["Estados Unidos","Paraguai","Austrália","Turquia"],
+"Grupo E":["Alemanha","Curaçao","Costa do Marfim","Equador"],
+"Grupo F":["Holanda","Japão","Suécia","Tunísia"],
+"Grupo G":["Bélgica","Egito","Irã","Nova Zelândia"],
+"Grupo H":["Espanha","Cabo Verde","Arábia Saudita","Uruguai"],
+"Grupo I":["França","Senegal","Iraque","Noruega"],
+"Grupo J":["Argentina","Argélia","Áustria","Jordânia"],
+"Grupo K":["Portugal","RD Congo","Uzbequistão","Colômbia"],
+"Grupo L":["Inglaterra","Croácia","Gana","Panamá"],
+};
+
+const CODES={"México":"MEX","Coreia do Sul":"KOR","República Tcheca":"CZE","África do Sul":"RSA","Canadá":"CAN","Bósnia":"BIH","Catar":"QAT","Suíça":"SUI","Brasil":"BRA","Marrocos":"MAR","Haiti":"HAI","Escócia":"SCO","Estados Unidos":"USA","Paraguai":"PAR","Austrália":"AUS","Turquia":"TUR","Alemanha":"GER","Curaçao":"CUW","Costa do Marfim":"CIV","Equador":"ECU","Holanda":"NED","Japão":"JPN","Suécia":"SWE","Tunísia":"TUN","Bélgica":"BEL","Egito":"EGY","Irã":"IRN","Nova Zelândia":"NZL","Espanha":"ESP","Cabo Verde":"CPV","Arábia Saudita":"KSA","Uruguai":"URU","França":"FRA","Senegal":"SEN","Iraque":"IRQ","Noruega":"NOR","Argentina":"ARG","Argélia":"ALG","Áustria":"AUT","Jordânia":"JOR","Portugal":"POR","RD Congo":"COD","Uzbequistão":"UZB","Colômbia":"COL","Inglaterra":"ENG","Croácia":"CRO","Gana":"GHA","Panamá":"PAN"};
+
+const C2T=Object.fromEntries(Object.entries(CODES).map(([t,c])=>[c,t]));
+
+const FLAGS={"Brasil":"🇧🇷","Argentina":"🇦🇷","França":"🇫🇷","Alemanha":"🇩🇪","Espanha":"🇪🇸","Portugal":"🇵🇹","Holanda":"🇳🇱","Bélgica":"🇧🇪","México":"🇲🇽","Estados Unidos":"🇺🇸","Canadá":"🇨🇦","Uruguai":"🇺🇾","Japão":"🇯🇵","Coreia do Sul":"🇰🇷","Austrália":"🇦🇺","Senegal":"🇸🇳","Costa do Marfim":"🇨🇮","Marrocos":"🇲🇦","Egito":"🇪🇬","Gana":"🇬🇭","Croácia":"🇭🇷","Bósnia":"🇧🇦","Suíça":"🇨🇭","República Tcheca":"🇨🇿","Turquia":"🇹🇷","Noruega":"🇳🇴","Suécia":"🇸","Áustria":"🇦🇹","Equador":"🇪🇨","Colômbia":"🇨🇴","Paraguai":"🇵🇾","Panamá":"🇵🇦","Haiti":"🇭🇹","Escócia":"🏴󠁧󠁢","Nova Zelândia":"🇳🇿","Arábia Saudita":"🇸🇦","África do Sul":"🇿","Argélia":"🇩🇿","Catar":"🇶🇦","Irã":"🇮🇷","Iraque":"🇮🇶","Inglaterra":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Uzbequistão":"🇺","RD Congo":"🇨🇩","Jordânia":"🇯🇴","Cabo Verde":"🇨🇻","Curaçao":"🇨🇼","Tunísia":"🇹🇳"};
+
+const SPT=20;
+const ALL=Object.values(GROUPS).flat();
+const SPEC=Array.from({length:68},(_,i)=>`ESP ${i+1}`);
+const SKEY="copa2026_owned";
+const DKEY="copa2026_did";
+
+let owned={};
+let view="home";
+let selGroup=null;
+let selTeam=null;
+let searchQ="";
+let filterTab="todas";
+let syncStatus="idle";
+
+// Device ID
+function getDeviceId(){
+let id=localStorage.getItem(DKEY);
+if(!id){id="dev_"+Math.random().toString(36).slice(2)+Date.now();localStorage.setItem(DKEY,id);}
+return id;
+}
+const DID=getDeviceId();
+
+// IndexedDB
+function openDB(){
+return new Promise((res,rej)=>{
+const r=indexedDB.open("copa2026",1);
+r.onupgradeneeded=e=>e.target.result.createObjectStore("owned");
+r.onsuccess=e=>res(e.target.result);
+r.onerror=e=>rej(e.target.error);
+});
+}
+async function idbGet(){
+try{const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction("owned","readonly");const r=tx.objectStore("owned").get("figurinhas");r.onsuccess=e=>res(e.target.result||{});r.onerror=e=>rej(e.target.error);});}catch(_){return{};}
+}
+async function idbSet(data){
+try{const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction("owned","readwrite");const r=tx.objectStore("owned").put(data,"figurinhas");r.onsuccess=()=>res(true);r.onerror=e=>rej(e.target.error);});}catch(_){return false;}
+}
+
+// Supabase
+const SB_URL="https://llmiydpmzrqexiutqoix.supabase.co";
+const SB_KEY="sb_publishable_Y7tT9PH4aSkeRC_vKiwRdw_nXNLl_37";
+async function cloudGet(){
+try{
+const r=await fetch(`${SB_URL}/rest/v1/figurinhas?device_id=eq.${DID}&select=owned_data`,{headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`}});
+const d=await r.json();
+if(d&&d[0])return d[0].owned_data;
+return null;
+}catch(_){return null;}
+}
+async function cloudSet(data){
+try{
+await fetch(`${SB_URL}/rest/v1/figurinhas`,{method:"POST",headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({device_id:DID,owned_data:data,updated_at:new Date().toISOString()})});
+return true;
+}catch(_){return false;}
+}
+
+// Helpers
+function stickers(team){const c=CODES[team]||team.slice(0,3).toUpperCase();return Array.from({length:SPT},(_,i)=>`${c} ${i+1}`);}
+function prog(team){const s=stickers(team);const h=s.filter(x=>owned[x]).length;return{have:h,total:SPT,pct:Math.round(h/SPT*100)};}
+function globalStats(){
+const total=ALL.length*SPT+SPEC.length;
+const have=ALL.reduce((a,t)=>a+stickers(t).filter(s=>owned[s]).length,0)+SPEC.filter(s=>owned[s]).length;
+return{have,total,pct:Math.round(have/total*100)};
+}
+function parseCode(raw){
+const s=raw.trim().toUpperCase().replace(/\s+/g," ");
+const m=s.match(/^([A-Z]{2,4})\s?(\d{1,2})$/);
+if(!m)return null;
+const[,code,num]=m;const n=parseInt(num);
+if(code==="ESP")return n>=1&&n<=68?`ESP ${n}`:null;
+if(C2T[code]&&n>=1&&n<=SPT)return `${code} ${n}`;
+return null;
+}
+
+// Save
+let saveTimer=null;
+function save(){
+idbSet(owned);
+setSyncStatus("saving");
+clearTimeout(saveTimer);
+saveTimer=setTimeout(async()=>{
+const ok=await cloudSet(owned);
+setSyncStatus(ok?"synced":"offline");
+setTimeout(()=>setSyncStatus("idle"),2000);
+},1000);
+}
+function setSyncStatus(s){syncStatus=s;render();}
+
+// Toggle
+function toggle(id,force){
+if(force===true)owned[id]=true;
+else if(force==="off")owned[id]=false;
+else owned[id]=!owned[id];
+save();
+render();
+}
+
+// Nav
+function nav(v){view=v;searchQ="";filterTab="todas";render();}
+function goGroup(g){selGroup=g;view="group";render();}
+function goTeam(t){selTeam=t;view="mark";render();}
+function goSpecial(){view="special";render();}
+
+// Render helpers
+function el(tag,props,children){
+const e=document.createElement(tag);
+Object.entries(props||{}).forEach(([k,v])=>{
+if(k==="style")Object.assign(e.style,v);
+else if(k.startsWith("on"))e.addEventListener(k.slice(2).toLowerCase(),v);
+else e[k]=v;
+});
+(children||[]).forEach(c=>{if(c)e.appendChild(typeof c==="string"?document.createTextNode(c):c);});
+return e;
+}
+function div(style,children){return el("div",{style},children);}
+function btn(style,onclick,children){return el("button",{style,onClick:onclick},children);}
+function txt(text,style){return el("span",{style,textContent:text});}
+
+function progressBar(pct,height=4){
+return div({background:C.bg,borderRadius:4,height,overflow:"hidden",width:"100%"},[
+div({width:`${pct}%`,background:pct===100?`linear-gradient(90deg,${C.green},#00ff88)`:`linear-gradient(90deg,${C.yellowSoft},${C.yellow})`,height:"100%",borderRadius:4,transition:"width .3s"})
+]);
+}
+
+function stickerCard(id,isSpecial){
+const have=!!owned[id];
+const num=id.split(" ")[1];
+const code=id.split(" ")[0];
+const isHL=id===highlighted;
+const flag=FLAGS[C2T[code]]||"";
+const b=btn({
+position:"relative",
+background:isHL?"linear-gradient(160deg,#3d2800,#7a5200)":have?isSpecial?"linear-gradient(160deg,#1a1000,#2d2000)":"linear-gradient(160deg,#001a2e,#003060)":C.surface,
+border:isHL?`2px solid ${C.yellow}`:have?isSpecial?`2px solid ${C.yellow}88`:`2px solid #0088ff88`:`1px solid ${C.border}`,
+borderRadius:14,padding:"10px 4px 8px",
+display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",
+cursor:"pointer",transition:"all 0.15s",overflow:"hidden",
+transform:isHL?"scale(1.08)":"scale(1)",
+boxShadow:isHL?`0 0 14px ${C.yellow}66`:"none",
+},()=>toggle(id),[
+have&&flag?div({position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:"28px",opacity:0.08,pointerEvents:"none",userSelect:"none"},[flag]):null,
+txt(code,{fontSize:"8px",fontWeight:800,letterSpacing:"1.5px",color:isHL?C.yellow:have?isSpecial?C.yellow:"#60aaff":C.textDim,zIndex:1}),
+txt(num,{fontSize:"20px",fontWeight:900,lineHeight:1,color:isHL||have?C.white:C.textDim,zIndex:1,display:"block"}),
+txt(isHL?"📸":have?isSpecial?"★":"✓":"·",{fontSize:"11px",height:"13px",lineHeight:"13px",color:isHL?C.yellow:have?isSpecial?C.yellow:C.green:"transparent",zIndex:1}),
+]);
+if(isHL&&highlightRef)highlightRef=b;
+return b;
+}
+</script>
+<script>
+let highlighted=null;
+let highlightRef=null;
+let toastTimer=null;
+let camStream=null;
+let camTimer=null;
+
+function showToast(id,already){
+const code=id.split(" ")[0];
+const team=C2T[code]||"";
+const t=div({position:"fixed",bottom:"90px",left:"50%",transform:"translateX(-50%)",zIndex:300,background:already?C.surface2:"#001a10",border:`1.5px solid ${already?C.yellow:C.green}`,borderRadius:"24px",padding:"10px 20px",display:"flex",alignItems:"center",gap:"10px",boxShadow:`0 4px 24px ${already?C.yellow:C.green}33`,whiteSpace:"nowrap",pointerEvents:"none"},[
+txt(already?"⚠️":"✅",{fontSize:"18px"}),
+div({display:"flex",flexDirection:"column"},[
+txt((already?"Já tinha: ":"Marcada! ")+id,{fontSize:"13px",fontWeight:800,color:already?C.yellow:C.green}),
+team?txt(team,{fontSize:"10px",color:C.textMuted}):null,
+])
+]);
+document.getElementById("app").appendChild(t);
+clearTimeout(toastTimer);
+toastTimer=setTimeout(()=>t.remove(),2400);
+}
+
+function stopCamera(){
+clearInterval(camTimer);
+if(camStream)camStream.getTracks().forEach(t=>t.stop());
+camStream=null;
+}
+
+function buildCamera(onDetected){
+const wrap=div({position:"relative",borderRadius:"14px",overflow:"hidden",border:`1px solid ${C.border2}`},[]);
+const vWrap=div({position:"relative",height:"130px",background:"#000"},[]);
+
+const video=el("video",{style:{width:"100%",height:"100%",objectFit:"cover"},playsInline:true,muted:true});
+const canvas=el("canvas",{style:{display:"none"}});
+vWrap.appendChild(video);
+vWrap.appendChild(canvas);
+
+// Corner brackets
+const corners=div({position:"absolute",inset:0,pointerEvents:"none",display:"flex",alignItems:"center",justifyContent:"center"},[
+div({width:"50%",height:"52%",position:"relative"},[
+div({position:"absolute",top:0,left:0,width:"18px",height:"18px",borderTop:`2px solid ${C.yellow}`,borderLeft:`2px solid ${C.yellow}`}),
+div({position:"absolute",top:0,right:0,width:"18px",height:"18px",borderTop:`2px solid ${C.yellow}`,borderRight:`2px solid ${C.yellow}`}),
+div({position:"absolute",bottom:0,left:0,width:"18px",height:"18px",borderBottom:`2px solid ${C.yellow}`,borderLeft:`2px solid ${C.yellow}`}),
+div({position:"absolute",bottom:0,right:0,width:"18px",height:"18px",borderBottom:`2px solid ${C.yellow}`,borderRight:`2px solid ${C.yellow}`}),
+])
+]);
+
+const statusDot=el("div",{style:{width:"6px",height:"6px",borderRadius:"50%",background:C.textDim,transition:"background 0.3s"}});
+const statusTxt=el("span",{style:{fontSize:"10px",color:C.textMuted,fontWeight:600},textContent:"Iniciando câmera..."});
+const statusBar=div({position:"absolute",bottom:"7px",left:"50%",transform:"translateX(-50%)",background:"#000000cc",borderRadius:"20px",padding:"3px 12px",display:"flex",alignItems:"center",gap:"6px"},[statusDot,statusTxt]);
+
+vWrap.appendChild(corners);
+vWrap.appendChild(statusBar);
+wrap.appendChild(vWrap);
+
+// Detected overlay
+let detectedOverlay=null;
+function showDetected(code){
+if(detectedOverlay)detectedOverlay.remove();
+const team=C2T[code.split(" ")[0]]||"";
+detectedOverlay=div({position:"absolute",inset:0,background:"#000000dd",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"8px",zIndex:10},[
+txt("CÓDIGO DETECTADO",{fontSize:"10px",color:C.textMuted,fontWeight:700,letterSpacing:"2px"}),
+txt(code,{fontSize:"38px",fontWeight:900,color:C.yellow,letterSpacing:"3px",display:"block"}),
+team?txt((FLAGS[team]||"🏳️")+" "+team,{fontSize:"13px",color:C.text}):null,
+div({display:"flex",gap:"10px",marginTop:"4px"},[
+btn({background:C.surface2,border:`1px solid ${C.border2}`,borderRadius:"22px",padding:"7px 16px",color:C.textMuted,fontSize:"12px",fontWeight:700,cursor:"pointer"},()=>{detectedOverlay.remove();detectedOverlay=null;startScan();},[txt("Ignorar")]),
+btn({background:"linear-gradient(135deg,#006620,#00a030)",border:`1px solid ${C.green}88`,borderRadius:"22px",padding:"7px 20px",color:C.green,fontSize:"13px",fontWeight:800,cursor:"pointer"},()=>{onDetected(code);detectedOverlay.remove();detectedOverlay=null;},[txt("✓ Marcar")]),
+])
+]);
+vWrap.appendChild(detectedOverlay);
+}
+
+let busy=false;
+async function scan(){
+if(busy||!camStream)return;
+busy=true;
+statusDot.style.background=C.yellow;
+statusTxt.textContent="Analisando...";
+canvas.width=video.videoWidth||640;
+canvas.height=video.videoHeight||480;
+canvas.getContext("2d").drawImage(video,0,0);
+const cw=Math.floor(canvas.width*.6),ch=Math.floor(canvas.height*.35);
+const cx=Math.floor((canvas.width-cw)/2),cy=Math.floor((canvas.height-ch)/2);
+const crop=document.createElement("canvas");crop.width=cw;crop.height=ch;
+const cc=crop.getContext("2d");cc.filter="contrast(2.2) brightness(1.1) grayscale(1)";
+cc.drawImage(canvas,cx,cy,cw,ch,0,0,cw,ch);
+try{
+const b64=await new Promise((res,rej)=>{crop.toBlob(blob=>{if(!blob){rej();return;}const fr=new FileReader();fr.onload=()=>res(fr.result.split(",")[1]);fr.onerror=rej;fr.readAsDataURL(blob);},"image/jpeg",.9);});
+const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:20,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:'Back of a FIFA 2026 Panini sticker. Find the code (2-4 letters + space + 1-2 digits, e.g. "BRA 5"). Reply ONLY with code or NONE.'}]}]})});
+const data=await resp.json();
+const text=(data.content?.[0]?.text||"").trim().toUpperCase().replace(/[^A-Z0-9 ]/g,"");
+const parsed=parseCode(text);
+if(parsed){clearInterval(camTimer);showDetected(parsed);}
+}catch(_){}
+statusDot.style.background=C.textDim;
+statusTxt.textContent="Aguardando figurinha";
+busy=false;
+}
+
+function startScan(){camTimer=setInterval(scan,1800);}
+
+navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}})
+.then(stream=>{
+camStream=stream;
+video.srcObject=stream;
+video.play();
+statusTxt.textContent="Aguardando figurinha";
+corners.style.display="flex";
+startScan();
+})
+.catch(()=>{statusTxt.textContent="Câmera indisponível";});
+
+return wrap;
+}
+
+function buildMarkScreen(title,flag,stickerList,isSpecial,onBack){
+highlighted=null;
+stopCamera();
+const wrap=div({paddingBottom:"80px"},[]);
+
+// Header
+const header=div({background:`linear-gradient(180deg,${C.surface2},${C.bg})`,padding:"14px 16px 16px",borderBottom:`1px solid ${C.border}`},[
+btn({background:"none",border:"none",color:C.yellow,fontSize:"13px",cursor:"pointer",padding:0,marginBottom:"12px"},onBack,[txt("← Voltar")]),
+div({display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"},[
+txt(flag,{fontSize:"42px"}),
+div({flex:1},[
+txt(title,{fontSize:"17px",fontWeight:800,color:C.white,display:"block"}),
+el("div",{id:"mark-prog-txt",style:{fontSize:"11px",color:isSpecial?C.yellow:"#60aaff",marginTop:"2px",fontWeight:600}}),
+el("div",{id:"mark-prog-bar",style:{marginTop:"6px"}}),
+]),
+]),
+]);
+
+const camWrap=div({});
+const cam=buildCamera((id)=>{
+toggle(id,true);
+highlighted=id;
+showToast(id,false);
+render();
+setTimeout(()=>{const el=document.getElementById("hl-card");if(el)el.scrollIntoView({behavior:"smooth",block:"center"});},100);
+});
+camWrap.appendChild(cam);
+header.appendChild(camWrap);
+
+header.appendChild(div({marginTop:"10px",display:"flex",gap:"8px",alignItems:"center"},[
+div({flex:1,fontSize:"10px",color:C.textMuted,lineHeight:1.5},[
+txt("📷 Aponte o verso → detecta automaticamente",{display:"block"}),
+txt("👆 Ou toque direto na figurinha abaixo",{display:"block"}),
+]),
+div({display:"flex",gap:"6px"},[
+btn({background:"#00aa3322",border:`1px solid ${C.green}44`,borderRadius:"8px",padding:"6px 10px",color:C.green,fontSize:"10px",fontWeight:700,cursor:"pointer"},()=>{stickerList.forEach(s=>toggle(s,true));render();},[txt("Todas ✓")]),
+btn({background:"#ff333322",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"6px 10px",color:C.red,fontSize:"10px",fontWeight:700,cursor:"pointer"},()=>{stickerList.forEach(s=>toggle(s,"off"));render();},[txt("Limpar")]),
+]),
+]));
+
+wrap.appendChild(header);
+
+// Tabs
+const tabBar=div({display:"flex",background:C.surface,borderBottom:`1px solid ${C.border}`},[]);
+["todas","tenho","faltam"].forEach(k=>{
+const t=btn({flex:1,padding:"11px 0",background:"none",border:"none",color:filterTab===k?C.yellow:C.textMuted,fontSize:"11px",fontWeight:700,cursor:"pointer",borderBottom:filterTab===k?`2px solid ${C.yellow}`:"2px solid transparent"},()=>{filterTab=k;render();});
+const hc=stickerList.filter(s=>owned[s]).length;
+t.textContent=k==="todas"?`Todas (${stickerList.length})`:k==="tenho"?`Tenho (${hc})`:`Faltam (${stickerList.length-hc})`;
+tabBar.appendChild(t);
+});
+wrap.appendChild(tabBar);
+
+// Grid
+const filtered=stickerList.filter(s=>filterTab==="tenho"?!!owned[s]:filterTab==="faltam"?!owned[s]:true);
+const grid=div({display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"8px",padding:"14px"},[]);
+filtered.forEach(s=>{
+const card=stickerCard(s,isSpecial);
+if(s===highlighted)card.id="hl-card";
+grid.appendChild(card);
+});
+wrap.appendChild(grid);
+
+// Update progress
+const p=isSpecial?{have:stickerList.filter(s=>owned[s]).length,total:stickerList.length,pct:Math.round(stickerList.filter(s=>owned[s]).length/stickerList.length*100)}:prog(title);
+const ptxt=wrap.querySelector("#mark-prog-txt");
+const pbar=wrap.querySelector("#mark-prog-bar");
+if(ptxt)ptxt.textContent=`${p.have}/${p.total} · ${p.pct}%`;
+if(pbar){pbar.innerHTML="";pbar.appendChild(progressBar(p.pct,5));}
+
+return wrap;
+}
+
+function buildHome(){
+const g=globalStats();
+const circ=2*Math.PI*62;
+const wrap=div({paddingBottom:"90px"},[
+div({background:`linear-gradient(160deg,#0a2060,#051240,${C.bg})`,padding:"28px 16px 24px",textAlign:"center",borderBottom:`1px solid ${C.border}`,position:"relative",overflow:"hidden"},[
+div({position:"absolute",top:"-40px",right:"-40px",width:"140px",height:"140px",borderRadius:"50%",border:`2px solid ${C.yellow}22`,pointerEvents:"none"}),
+div({position:"absolute",top:"-20px",right:"-20px",width:"90px",height:"90px",borderRadius:"50%",border:`2px solid ${C.yellow}33`,pointerEvents:"none"}),
+txt("FIFA World Cup",{fontSize:"11px",letterSpacing:"5px",color:C.yellow,fontWeight:800,display:"block",marginBottom:"6px",textTransform:"uppercase"}),
+txt("2026™",{fontSize:"32px",fontWeight:900,color:C.white,display:"block",marginBottom:"4px"}),
+txt("🇲🇽 México · 🇺🇸 EUA · 🇨🇦 Canadá",{fontSize:"12px",color:C.textMuted,display:"block",marginBottom:"22px"}),
+div({display:"flex",justifyContent:"center",marginBottom:"20px"},[
+div({position:"relative",width:"150px",height:"150px"},[
+el("svg",{viewBox:"0 0 150 150",style:{width:"150px",height:"150px",transform:"rotate(-90deg)"}},[
+el("circle",{cx:75,cy:75,r:62,fill:"none",stroke:C.border2,strokeWidth:10}),
+el("circle",{cx:75,cy:75,r:62,fill:"none",stroke:C.yellow,strokeWidth:10,strokeDasharray:circ,strokeDashoffset:circ*(1-g.pct/100),strokeLinecap:"round",style:{transition:"stroke-dashoffset .5s"}}),
+]),
+div({position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},[
+txt(g.pct+"%",{fontSize:"32px",fontWeight:900,color:C.white,display:"block"}),
+txt(`${g.have}/${g.total}`,{fontSize:"10px",color:C.textMuted,marginTop:"3px"}),
+]),
+]),
+]),
+div({display:"flex",gap:"10px"},[
+...[{l:"Tenho",v:g.have,c:C.green,bg:"#00ff4410"},{l:"Faltam",v:g.total-g.have,c:C.red,bg:"#ff444410"},{l:"Total",v:g.total,c:C.yellow,bg:"#ffcc0010"}].map(s=>
+div({flex:1,background:s.bg,borderRadius:"12px",padding:"10px 6px",textAlign:"center",border:`1px solid ${s.c}22`},[
+txt(s.v,{fontSize:"20px",fontWeight:900,color:s.c,display:"block"}),
+txt(s.l,{fontSize:"10px",color:C.textMuted,marginTop:"1px"}),
+])
+)
+]),
+]),
+div({padding:"18px 14px 0"},[
+txt("GRUPOS — ORDEM DO ÁLBUM",{fontSize:"10px",letterSpacing:"3px",color:C.textDim,fontWeight:700,display:"block",marginBottom:"10px"}),
+div({display:"flex",flexDirection:"column",gap:"7px"},[
+...Object.entries(GROUPS).map(([group,teams])=>{
+const gHave=teams.reduce((a,t)=>a+prog(t).have,0);
+const pct=Math.round(gHave/(teams.length*SPT)*100);
+return btn({background:C.surface,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"11px 13px",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",textAlign:"left",width:"100%"},()=>goGroup(group),[
+div({width:"34px",height:"34px",borderRadius:"9px",background:`linear-gradient(135deg,#b8900033,#ffc10722)`,border:`1px solid ${C.yellow}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:900,color:C.yellow,flexShrink:0},[txt(group.replace("Grupo ",""))]),
+div({flex:1},[
+txt(teams.map(t=>FLAGS[t]||"🏳️").join(" "),{fontSize:"18px",display:"block",marginBottom:"4px"}),
+progressBar(pct),
+]),
+txt(pct===100?"✓":pct+"%",{fontSize:"12px",fontWeight:800,color:pct===100?C.green:C.yellow,minWidth:"32px",textAlign:"right"}),
+]);
+})
+]),
+btn({width:"100%",marginTop:"8px",marginBottom:"8px",background:"linear-gradient(135deg,#1a1000,#2d1e00)",border:`1px solid ${C.yellow}55`,borderRadius:"14px",padding:"14px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"},goSpecial,[
+txt("⭐",{fontSize:"28px"}),
+div({flex:1,textAlign:"left"},[
+txt("Cromos Especiais",{fontSize:"13px",fontWeight:800,color:C.yellow,display:"block"}),
+txt(`${SPEC.filter(s=>owned[s]).length}/${SPEC.length} coletados`,{fontSize:"10px",color:C.textMuted}),
+]),
+txt("›",{fontSize:"18px",color:C.yellow}),
+]),
+]),
+]);
+return wrap;
+}
+
+function buildGroup(){
+return div({padding:"18px 16px",paddingBottom:"90px"},[
+btn({background:"none",border:"none",color:C.yellow,fontSize:"13px",cursor:"pointer",marginBottom:"14px",padding:0},()=>nav("home"),[txt("← Início")]),
+el("h2",{style:{color:C.white,fontSize:"20px",fontWeight:900,marginBottom:"2px"},textContent:selGroup}),
+txt("Ordem conforme o álbum físico",{fontSize:"10px",color:C.textDim,display:"block",marginBottom:"14px"}),
+div({display:"flex",flexDirection:"column",gap:"9px"},[
+...(GROUPS[selGroup]||[]).map(team=>{
+const p=prog(team);const code=CODES[team]||"";
+return btn({background:C.surface,border:p.pct===100?`1px solid ${C.green}55`:`1px solid ${C.border}`,borderRadius:"16px",padding:"13px 14px",display:"flex",alignItems:"center",gap:"13px",cursor:"pointer",width:"100%"},()=>goTeam(team),[
+txt(FLAGS[team]||"🏳️",{fontSize:"36px"}),
+div({flex:1,textAlign:"left"},[
+div({display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"},[
+txt(team,{fontSize:"14px",fontWeight:700,color:C.text}),
+txt(code,{fontSize:"10px",fontWeight:900,color:C.yellow,letterSpacing:"2px",background:`${C.yellow}18`,borderRadius:"4px",padding:"1px 5px"}),
+]),
+progressBar(p.pct),
+txt(`${p.have}/${p.total} figurinhas`,{fontSize:"10px",color:C.textMuted,marginTop:"3px",display:"block"}),
+]),
+txt(p.pct===100?"✓":`${p.pct}%`,{fontSize:"13px",fontWeight:800,color:p.pct===100?C.green:C.yellow}),
+]);
+})
+]),
+]);
+}
+
+function buildSearch(){
+const results=searchQ.length>=1?ALL.filter(t=>t.toLowerCase().includes(searchQ.toLowerCase())||(CODES[t]||"").startsWith(searchQ.toUpperCase())):[];
+return div({padding:"18px 16px",paddingBottom:"90px"},[
+el("h2",{style:{color:C.white,fontSize:"20px",fontWeight:900,marginBottom:"4px"},textContent:"Buscar"}),
+txt("Nome ou sigla (ex: BRA, ARG, ENG)",{fontSize:"10px",color:C.textMuted,display:"block",marginBottom:"12px"}),
+el("input",{type:"text",placeholder:"Brasil, BRA, Argentina...",value:searchQ,style:{width:"100%",background:C.surface,border:`1px solid ${C.border2}`,borderRadius:"12px",padding:"13px 15px",color:C.white,fontSize:"14px",outline:"none",boxSizing:"border-box"},onInput:e=>{searchQ=e.target.value;render();}}),
+searchQ.length===0?div({marginTop:"16px"},[
+txt("SIGLAS — TOQUE PARA ABRIR",{fontSize:"10px",color:C.textDim,display:"block",marginBottom:"10px",letterSpacing:"2px"}),
+div({display:"flex",flexWrap:"wrap",gap:"6px"},[
+...ALL.map(team=>{
+const code=CODES[team]||"";const p=prog(team);
+return btn({background:p.pct===100?`${C.green}18`:p.have>0?`${C.yellow}12`:C.surface,border:p.pct===100?`1px solid ${C.green}55`:p.have>0?`1px solid ${C.yellow}44`:`1px solid ${C.border}`,borderRadius:"8px",padding:"5px 11px",color:p.pct===100?C.green:p.have>0?C.yellow:C.textDim,fontSize:"11px",fontWeight:900,cursor:"pointer",letterSpacing:"1.5px"},()=>{searchQ=code;render();},[txt(code)]);
+})
+]),
+]):null,
+div({marginTop:"12px",display:"flex",flexDirection:"column",gap:"8px"},[
+...results.map(team=>{
+const p=prog(team);const code=CODES[team]||"";
+return btn({background:C.surface,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"13px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",width:"100%"},()=>{selTeam=team;const grp=Object.entries(GROUPS).find(([,ts])=>ts.includes(team));if(grp)selGroup=grp[0];view="mark";render();},[
+txt(FLAGS[team]||"🏳️",{fontSize:"30px"}),
+div({flex:1,textAlign:"left"},[
+div({display:"flex",alignItems:"center",gap:"7px",marginBottom:"2px"},[
+txt(team,{fontSize:"14px",fontWeight:700,color:C.text}),
+txt(code,{fontSize:"10px",fontWeight:900,color:C.yellow,letterSpacing:"2px",background:`${C.yellow}18`,borderRadius:"4px",padding:"1px 5px"}),
+]),
+txt(`${p.have}/${p.total} · ${p.pct}%`,{fontSize:"10px",color:C.textMuted}),
+]),
+txt("›",{fontSize:"16px",color:C.yellow}),
+]);
+}),
+results.length===0&&searchQ.length>=1?txt(`Nenhum resultado para "${searchQ}"`,{fontSize:"13px",color:C.textDim,display:"block",textAlign:"center",padding:"36px 0"}):null,
+]),
+]);
+}
+
+function buildNavBar(){
+const bar=div({position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",padding:"7px 0 11px",zIndex:100},[]);
+[{id:"home",icon:"🏆",label:"Início"},{id:"search",icon:"🔍",label:"Buscar"},{id:"special",icon:"⭐",label:"Especiais"}].forEach(tab=>{
+const b=btn({flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"},()=>nav(tab.id),[
+txt(tab.icon,{fontSize:"20px"}),
+txt(tab.label,{fontSize:"9px",color:view===tab.id?C.yellow:C.textDim,fontWeight:700,letterSpacing:".5px"}),
+]);
+bar.appendChild(b);
+});
+return bar;
+}
+
+function buildSyncBadge(){
+const labels={saving:["💾","Salvando..."],synced:["☁️","Nuvem OK ✓"],offline:["📵","Offline — salvo localmente"],syncing:["☁️","Sincronizando..."]};
+if(!labels[syncStatus])return null;
+const[icon,label]=labels[syncStatus];
+const colors={saving:C.textMuted,synced:C.green,offline:C.yellow,syncing:C.yellow};
+return div({position:"fixed",top:"10px",right:"10px",zIndex:300,background:C.surface2,border:`1px solid ${C.border2}`,borderRadius:"18px",padding:"5px 12px",display:"flex",alignItems:"center",gap:"5px"},[
+txt(icon,{fontSize:"11px"}),
+txt(label,{fontSize:"10px",color:colors[syncStatus],fontWeight:700}),
+]);
+}
+
+function render(){
+stopCamera();
+const app=document.getElementById("app");
+app.innerHTML="";
+
+const badge=buildSyncBadge();
+if(badge)app.appendChild(badge);
+
+let content;
+if(view==="mark"&&selTeam){
+content=buildMarkScreen(selTeam,FLAGS[selTeam]||"🏳️",stickers(selTeam),false,()=>{view="group";render();});
+}else if(view==="special"){
+content=buildMarkScreen("Cromos Especiais","⭐",SPEC,true,()=>nav("home"));
+}else if(view==="group"){
+content=buildGroup();
+app.appendChild(content);
+app.appendChild(buildNavBar());
+return;
+}else if(view==="search"){
+content=buildSearch();
+}else{
+content=buildHome();
+}
+
+app.appendChild(content);
+if(view!=="mark"&&view!=="special")app.appendChild(buildNavBar());
+}
+
+// Init
+(async()=>{
+owned=await idbGet()||{};
+render();
+try{
+const cloud=await cloudGet();
+if(cloud){
+const merged={...cloud};
+Object.keys(owned).forEach(k=>{if(owned[k])merged[k]=true;});
+owned=merged;
+await idbSet(owned);
+setSyncStatus("synced");
+}
+}catch(_){}
+
+window.addEventListener("online",async()=>{
+setSyncStatus("syncing");
+const ok=await cloudSet(owned);
+setSyncStatus(ok?"synced":"offline");
+setTimeout(()=>setSyncStatus("idle"),2000);
+});
+})();
+</script>
+</body>
+</html>

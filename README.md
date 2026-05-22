@@ -1,0 +1,1 @@
+# CearaStickers2026
